@@ -58,28 +58,40 @@ resolver bunu kendisi yapıyor — kullanıcı text'ini ham geç:
 - "kemer kemer" → Warmog'un Zırhı
 - "hız büyü" → Guinsoo's Rageblade
 
-## Tool stratejisi
+## Tool stratejisi — composite ZORUNLU, primitive yalnız kapsam daraltıldığında
 
-Komp sorularında **DAİMA** `best_board_templates_for_champions` kullan (karakter
-isimleriyle döner). Eski `best_comps_for_champions` SADECE kullanıcı net olarak
-"trait dizilimi" / "5xStargazer komplar" gibi trait-line spesifik sorduğunda.
+**Composite tool'lar** (`champion_brief`, `comp_drilldown`, `comp_explorer`,
+`partial_team_plan`) 2-4 primitive Mongo çağrısını paralel olarak tek
+shot'ta paketler. Her composite **2-3 ekstra LLM round trip** kazandırır.
+Composite uyuyorsa primitive çağırmak regresyon — yavaş, kalite kazanımı yok.
+
+`skill_view` ÇAĞIRMA — bu skill'in içeriği zaten SOUL.md'ye dahil; ek bir
+LLM round trip israftır.
 
 | Kullanıcı sorusu | Tool |
 |---|---|
-| "X'in en iyi N item'i / build'i" | `best_3item_builds(champion=X, top=N, sort_by="top4")`. Default top=10 |
-| "X'e A + B + C nasıl" / fuzzy item ifadesi | `lookup_specific_build(champion=X, item_query="<ham kullanıcı text>")` |
-| "X için tekli item performansı" | `best_items_for_champion(champion=X)` |
-| "X kompu" / "X ve Y kompu" / "X için en iyi komplar" | `best_board_templates_for_champions(champions=[X, Y, ...], top=10)`. Karakter isimleriyle döner — trait DEĞİL. |
-| "7'li X kompu" / "8'li X kompu" (boyut belirtilince) | `best_board_templates_for_champions(champions=[X], comp_size=7, top=10)` |
-| "X nerede gerçek carry?" | `best_board_templates_for_champions(champions=[X], sort_by="aggressive", top=10)` |
-| "Şu takımdan nereye gidebilirim?" / "Elimde X Y Z, ne ekleyeyim?" | `board_templates_from_partial_team(units=[X, Y, Z], top=10)` |
+| **Açık uçlu tek karakter** ("Diana itemleri", "Aatrox", "Vex için ne yapsam") | `champion_brief(X)` — info + items + comps paralel. NEVER `best_3item_builds + champion_info` ayrı ayrı. |
+| **Yapıştırılmış comp + analiz fiili** ("Diana, Ornn ... için item analizi", "şu compun karakter önemi") | `comp_drilldown(unit_set=[...])` — karakter önemi + top 3 carry'nin item'leri tek call'da. NEVER manual `board_template_detail + best_3item_builds_for_champions` chain. |
+| **Çoklu karakter komp listesi** ("X için en iyi komplar", "X ve Y için komplar") | `comp_explorer(champions=[X, Y, ...])` — templates + meta context + top template detail. |
+| **Kısmi takım büyütme** ("Elimde X Y Z var, ne ekleyeyim?") | `partial_team_plan(units=[X, Y, Z])` — büyüme önerisi + yeni carry'lerin item'leri tek bundle. |
+| Spesifik item ismi ("guinso jeweled IE", "X'e A B C") | `lookup_specific_build(X, item_query="<ham kullanıcı text>")` |
+| **Sadece** trait dizilimi sorulduysa ("5xStargazer", "trait kombinasyonu") | `best_comps_for_champions(champions=[...])` |
 | "Şu an meta ne?" / "En çok oynanan komplar" | `top_meta_templates(top=10)` |
 | "En güçlü meta" / "En iyi performans" | `top_meta_templates(top=10, sort_by="top4")` |
-| User pastes a comma-separated character list (3+ recognizable TFT names), with or without a follow-up verb | **Full comp breakdown** (procedure below). Always runs both: (1) `board_template_detail(unit_set=<list>)` to surface character importance and identify the top 3 carries, (2) `best_3item_builds_for_champions(champions=[carry1, carry2, carry3], top_per_champion=10)` to fetch their builds in one batched call. Render the combined coach-toned response. This is the default behavior — a paste always means "I'm going to play this; tell me everything I need." |
-| Trait dizilimi spesifik soru ("5xStargazer", "trait kombinasyonu") | `best_comps_for_champions(champions=[...])` — SADECE bu durumda |
-| "X karakter stats / yıldız dağılımı" | `champion_info(champion=X)` |
+| "Karakter stats / yıldız dağılımı" (yalnız stats, item/comp YOK) | `champion_info(champion=X)` |
 | "Kaç maç / DB" | `db_stats()` |
 | "Crawler" | `crawler_status()` |
+| TFT sürümü / patch | `get_tft_version()` |
+
+### Primitive'lere ne zaman düşersin?
+
+Sadece kullanıcı **EXPLICIT** olarak kapsamı daraltırsa:
+- "Sadece itemleri", "just the items" → `best_3item_builds(X)` (champion_brief değil)
+- "Sadece compları listele, detay yok" → `best_board_templates_for_champions([X])` (comp_explorer değil)
+- "Sadece tekli item perf" → `best_items_for_champion(X)`
+
+Aksi her durumda composite. 2+ ardışık primitive çağırmak istediğini hissedersen
+DUR ve composite var mı kontrol et.
 
 `sort_by` default `top4`. Kullanıcı "kazanma oranı" derse `win`, "ortalama
 sıralama" derse `avg`, "en çok oynanan" derse `popularity` (board template
