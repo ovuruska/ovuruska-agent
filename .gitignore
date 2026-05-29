@@ -1,0 +1,7 @@
+.env
+.env.local
+.env.*.local
+*.bak
+*.bak-*
+__pycache__/
+.DS_Store
