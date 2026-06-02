@@ -457,5 +457,5 @@ paste_collapse_char_threshold: 2000
 _config_version: 24
 mcp_servers:
   hn:
-    command: /Users/oguzvuruskaner/Software/personal/tftlegends/scripts/run_hn_mcp.sh
+    command: /Users/oguzvuruskaner/Software/personal/agent-monorepo/plugins/hn/run_mcp.sh
     enabled: true
